@@ -1,0 +1,8 @@
+{
+  "name": "gltf-parser",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/4nzi/gltf-parser.git",
+  "author": "4nzi <anzi_ol@outlook.jp>",
+  "license": "MIT"
+}
