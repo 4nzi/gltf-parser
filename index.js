@@ -1,4 +1,4 @@
-const LE = true // Binary GLTF is little endian.
+const LE = true
 const MAGIC_glTF = 0x676c5446
 const GLB_FILE_HEADER_SIZE = 12
 const GLB_CHUNK_LENGTH_SIZE = 4
@@ -14,20 +14,20 @@ const getMagic = (dataView) => {
 
 const getVersion = (dataView) => {
     const offset = 4
-    let version = dataView.getUint32(offset, LE)
+    const version = dataView.getUint32(offset, LE)
     return version
 }
 
 const getTotalLength = (dataView) => {
     const offset = 8
-    let length = dataView.getUint32(offset, LE)
+    const length = dataView.getUint32(offset, LE)
     return length
 }
 
 const getGLBMeta = (dataView) => {
-    let magic = getMagic(dataView)
-    let version = getVersion(dataView)
-    let total = getTotalLength(dataView)
+    const magic = getMagic(dataView)
+    const version = getVersion(dataView)
+    const total = getTotalLength(dataView)
 
     return {
         magic: magic,
@@ -38,8 +38,8 @@ const getGLBMeta = (dataView) => {
 
 const getJSONData = (dataView) => {
     const offset = GLB_FILE_HEADER_SIZE
-    let chunkLength = dataView.getUint32(offset, LE)
-    let chunkType = dataView.getUint32(offset + GLB_CHUNK_LENGTH_SIZE, LE)
+    const chunkLength = dataView.getUint32(offset, LE)
+    const chunkType = dataView.getUint32(offset + GLB_CHUNK_LENGTH_SIZE, LE)
 
     if (chunkType !== GLB_CHUNK_TYPE_JSON) {
         console.warn("This GLB file doesn't have a JSON part.")
@@ -57,100 +57,121 @@ const getJSONData = (dataView) => {
     }
 }
 
-const getPosition = (jsonData, buffer, offset) => {
-    let index = jsonData.json.meshes[0].primitives[0].attributes.POSITION
+const getPosition = (jsonData, buffer, offset, meshIndex) => {
+    const index = jsonData.json.meshes[meshIndex].primitives[0].attributes.POSITION
 
     const view = jsonData.json.bufferViews[index]
     let position = []
 
-    let vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
-    for (var i = 0; i < view.byteLength; i += 4) {
+    const vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
+    for (let i = 0; i < view.byteLength; i += 4) {
         position.push(vtx.getFloat32(i, LE))
     }
 
     return position
 }
 
-const getIndices = (jsonData, buffer, offset) => {
-    let index = jsonData.json.meshes[0].primitives[0].indices
-
+const getIndices = (jsonData, buffer, offset, meshIndex) => {
+    const index = jsonData.json.meshes[meshIndex].primitives[0].indices
     const view = jsonData.json.bufferViews[index]
-    let indices = []
 
-    let vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
-    for (var i = 0; i < view.byteLength; i += 2) {
+    let indices = []
+    const vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
+    for (let i = 0; i < view.byteLength; i += 2) {
         indices.push(vtx.getUint16(i, LE))
     }
 
     return indices
 }
 
-const getNormal = (jsonData, buffer, offset) => {
-    if (!jsonData.json.meshes[0].primitives[0].attributes.NORMAL) {
+const getNormal = (jsonData, buffer, offset, meshIndex) => {
+    if (!jsonData.json.meshes[meshIndex].primitives[0].attributes.NORMAL) {
         return []
     }
 
-    let index = jsonData.json.meshes[0].primitives[0].attributes.NORMAL
-
+    const index = jsonData.json.meshes[meshIndex].primitives[0].attributes.NORMAL
     const view = jsonData.json.bufferViews[index]
-    let normal = []
 
-    let vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
-    for (var i = 0; i < view.byteLength; i += 4) {
+    let normal = []
+    const vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
+    for (let i = 0; i < view.byteLength; i += 4) {
         normal.push(vtx.getFloat32(i, LE))
     }
 
     return normal
 }
 
-const getTexCoord = (jsonData, buffer, offset) => {
-    if (!jsonData.json.meshes[0].primitives[0].attributes.TEXCOORD_0) {
+const getTexCoord = (jsonData, buffer, offset, meshIndex) => {
+    if (!jsonData.json.meshes[meshIndex].primitives[0].attributes.TEXCOORD_0) {
         return []
     }
 
-    let index = jsonData.json.meshes[0].primitives[0].attributes.TEXCOORD_0
-
+    const index = jsonData.json.meshes[meshIndex].primitives[0].attributes.TEXCOORD_0
     const view = jsonData.json.bufferViews[index]
-    let uv = []
 
-    let vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
-    for (var i = 0; i < view.byteLength; i += 4) {
+    let uv = []
+    const vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
+    for (let i = 0; i < view.byteLength; i += 4) {
         uv.push(vtx.getFloat32(i, LE))
     }
 
     return uv
 }
 
-export const parseGLB = (raw) => {
-    let ds = new DataView(raw)
+const getTexture = (jsonData, buffer, offset, meshIndex) => {
+    let index = -1
 
-    let glbMeta = getGLBMeta(ds)
-    console.log("magic " + glbMeta.magic.toString(16))
+    if (jsonData.json.images) {
+        index = jsonData.json.images[meshIndex].bufferView
+    }
+
+    if (index === -1) {
+        console.warn("Texture field was not found.")
+        return ""
+    }
+
+    const view = jsonData.json.bufferViews[index]
+
+    const imgBuf = new Uint8Array(
+        buffer,
+        offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset,
+        view.byteLength
+    )
+
+    const img = new Image()
+    img.src = URL.createObjectURL(new Blob([imgBuf]))
+
+    return img.src
+}
+
+export const parseGLB = (raw) => {
+    const ds = new DataView(raw)
+    const glbMeta = getGLBMeta(ds)
+    let meshes = []
 
     if (glbMeta.magic !== MAGIC_glTF) {
         console.warn("This file is not a GLB file.")
-        return;
+        return
     }
 
     const jsonData = getJSONData(ds)
-
     const offset = (GLB_FILE_HEADER_SIZE + GLB_CHUNK_HEADER_SIZE) + jsonData.length
-    let dataChunkType = ds.getUint32(offset + GLB_CHUNK_LENGTH_SIZE, LE)
+    const dataChunkType = ds.getUint32(offset + GLB_CHUNK_LENGTH_SIZE, LE)
 
     if (dataChunkType !== GLB_CHUNK_TYPE_BIN) {
         console.warn("This GLB file doesn't have a binary buffer.")
         return
     }
 
-    const atributes = {
-        pos: getPosition(jsonData, ds.buffer, offset),
-        inx: getIndices(jsonData, ds.buffer, offset),
-        nor: getNormal(jsonData, ds.buffer, offset),
-        uv: getTexCoord(jsonData, ds.buffer, offset)
+    for (let i in jsonData.json.meshes) {
+        meshes.push({
+            pos: getPosition(jsonData, ds.buffer, offset, i),
+            inx: getIndices(jsonData, ds.buffer, offset, i),
+            nor: getNormal(jsonData, ds.buffer, offset, i),
+            uv: getTexCoord(jsonData, ds.buffer, offset, i),
+            tex: getTexture(jsonData, ds.buffer, offset, i)
+        })
     }
 
-    console.log(jsonData)
-    console.log(atributes)
-
-    return atributes
+    return meshes
 }
