@@ -61,49 +61,58 @@ const getJSONData = (dataView) => {
 }
 
 const getAttribute = (jsonData, buffer, offset, i, type) => {
+    const mesh = jsonData.json.meshes[i].primitives[0]
     let result = []
-    let index = -1
+    let index = null
     let stride = 4
 
-    if (type == "POSITION") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.POSITION
+    switch (type) {
+        case "POSITION":
+            index = mesh.attributes.POSITION
+            break
 
-    } else if (type == "NORMAL") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.NORMAL
+        case "NORMAL":
+            index = mesh.attributes.NORMAL
+            break
 
-    } else if (type == "TANGENT") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.TANGENT
+        case "TANGENT":
+            index = mesh.attributes.TANGENT
+            break
 
-    } else if (type == "TEXCOORD_0") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.TEXCOORD_0
+        case "TEXCOORD_0":
+            index = mesh.attributes.TEXCOORD_0
+            break
 
-    } else if (type == "WEIGHTS_0") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.WEIGHTS_0
+        case "WEIGHTS_0":
+            index = mesh.attributes.WEIGHTS_0
+            break
 
-    } else if (type == "JOINTS_0") {
-        index = jsonData.json.meshes[i].primitives[0].attributes.JOINTS_0
-        stride = 1
+        case "JOINTS_0":
+            index = mesh.attributes.JOINTS_0
+            stride = 1
+            break
 
-    } else if (type == "indices") {
-        index = jsonData.json.meshes[i].primitives[0].indices
-        stride = 2
+        case "indices":
+            index = mesh.indices
+            stride = 2
+            break
+
+        default:
+            console.warn("Invalid type.")
+            return
     }
 
-    if (index == undefined || null) { return [] }
+    if (index == undefined || null) { return }
 
     const accessors = jsonData.json.accessors[index]
     const view = jsonData.json.bufferViews[Number(accessors.bufferView)]
     const vtx = new DataView(buffer, offset + GLB_CHUNK_HEADER_SIZE + view.byteOffset, view.byteLength)
 
     for (let i = 0; i < view.byteLength; i += stride) {
-        if (stride == 4) {
-            result.push(vtx.getFloat32(i, LE))
-
-        } else if (stride == 1) {
-            result.push(vtx.getUint8(i, LE))
-
-        } else if (stride == 2) {
-            result.push(vtx.getUint16(i, LE))
+        switch (stride) {
+            case 4: result.push(vtx.getFloat32(i, LE)); break
+            case 2: result.push(vtx.getUint16(i, LE)); break
+            case 1: result.push(vtx.getUint8(i, LE)); break
         }
     }
 
@@ -114,22 +123,25 @@ const getTexture = (jsonData, buffer, offset, i, type) => {
     const material = jsonData.json.materials[jsonData.json.meshes[i].primitives[0].material]
     let index = null
 
-    if (type == "albedo") {
-        if (!material.pbrMetallicRoughness) {
-            return null
-        }
+    if (material == null || undefined) { return }
 
-        index = material.pbrMetallicRoughness.baseColorTexture.index
+    switch (type) {
+        case "albedo":
+            if (!material.pbrMetallicRoughness.baseColorTexture) return
+            index = material.pbrMetallicRoughness.baseColorTexture.index
+            break
 
-    } else if (type == "normal") {
-        if (!material.normalTexture) {
-            return null
-        }
+        case "normal":
+            if (!material.normalTexture) return
+            index = material.normalTexture.index
+            break
 
-        index = material.normalTexture.index
+        default:
+            console.warn("Invalid type.")
+            return
     }
 
-    if (index == undefined || null) { return null }
+    if (index == undefined || null) { return }
 
     const view = jsonData.json.bufferViews[jsonData.json.images[index].bufferView]
 
@@ -146,16 +158,12 @@ const getTexture = (jsonData, buffer, offset, i, type) => {
 }
 
 const getSkins = (jsonData, buffer, offset, i) => {
-    if (!jsonData.json.skins) {
-        return null
+    const skinInx = jsonData.json.nodes.find(node => node.mesh == i).skin
 
-    } else if (!jsonData.json.skins[i].joints) {
-        return null
-    }
+    if (skinInx == null || undefined) { return }
 
-    let invMatrix = [], bones = []
-
-    const skin = jsonData.json.skins[i]
+    let invMatrix = [], result = []
+    const skin = jsonData.json.skins[skinInx]
     const index = skin.inverseBindMatrices
     const accessors = jsonData.json.accessors[index]
     const view = jsonData.json.bufferViews[Number(accessors.bufferView)]
@@ -170,7 +178,7 @@ const getSkins = (jsonData, buffer, offset, i) => {
     skin.joints.forEach((joint, i) => {
         const node = jsonData.json.nodes[joint]
 
-        bones.push({
+        result.push({
             id: joint,
             jointInx: i,
             name: node.name || null,
@@ -182,7 +190,19 @@ const getSkins = (jsonData, buffer, offset, i) => {
         })
     })
 
-    return bones
+    return result
+}
+
+const getScene = (jsonData, i) => {
+    const node = jsonData.json.nodes.find(node => node.mesh == i)
+
+    const result = {
+        translation: node.translation || [0, 0, 0],
+        rotation: node.rotation || [0, 0, 0],
+        scale: node.scale || [1, 1, 1]
+    }
+
+    return result
 }
 
 const parseGLB = (raw) => {
@@ -221,6 +241,7 @@ const parseGLB = (raw) => {
                 normal: getTexture(jsonData, ds.buffer, offset, i, "normal")
             },
             skins: getSkins(jsonData, ds.buffer, offset, i),
+            scene: getScene(jsonData, i)
         })
     }
 
