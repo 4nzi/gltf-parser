@@ -9,7 +9,7 @@ A minimal, JavaScript glTF(glb) Parser, Parses to a JavaScript Object.
     {
         id:Number,
 
-        attributes: {
+        attribute: {
             inx: Array
             nor: Array
             tan: Array
@@ -19,7 +19,7 @@ A minimal, JavaScript glTF(glb) Parser, Parses to a JavaScript Object.
             wei: Array
         },
 
-        textures: {
+        texture: {
             albedo: String
             normal: String
         },
@@ -32,8 +32,15 @@ A minimal, JavaScript glTF(glb) Parser, Parses to a JavaScript Object.
             scale:     Array
             rotation:  Array
             children:  Array
-            invMatrix: Array
-        }
+        },
+
+        animations: Array,
+        
+        scene: {
+            translation: vec3,
+            rotation: vec4,
+            scale: vec3
+        },
     }, ...
 ]    
 ```
